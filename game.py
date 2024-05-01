@@ -2,13 +2,28 @@
 import pygame
 
 
+# Screen settings
 WIDTH = 600
 HEIGHT = 600
 TITLE = "Custom Hit Boxes"
 FPS = 60
 
 
-# callback function (what's that mean?)
+# Player settings
+P1_CONTROLS = {'up': pygame.K_w,
+               'down': pygame.K_s,
+               'left': pygame.K_a,
+               'right': pygame.K_d}
+
+P2_CONTROLS = {'up': pygame.K_UP,
+               'down': pygame.K_DOWN,
+               'left': pygame.K_LEFT,
+               'right': pygame.K_RIGHT}
+
+PLAYER_SPEED = 5
+
+
+# Collision callback function
 def hitbox_collide(sprite1, sprite2):
     return sprite1.hitbox.colliderect(sprite2.hitbox)
 
@@ -19,14 +34,14 @@ class Entity(pygame.sprite.Sprite):
     def __init__(self, image, location, hitbox_size=None, hitbox_anchor='center'):
         '''
         hitbox_size should be an ordered pair in the form [width, height].
-        hitbox_anchor is any valid rectangle alignment attribute that is
-        an ordered pair.
+        hitbox_anchor is any valid Rect positioning attribute. If the Rect
+        attribute is not an ordered pair, then the hitbox will be centered
+        on the other axis.
         '''
         super().__init__()
 
         self.image = image
         self.rect = self.image.get_rect()
-
         self.vx = 0
         self.vy = 0
 
@@ -36,20 +51,33 @@ class Entity(pygame.sprite.Sprite):
             w, h = hitbox_size
             self.hitbox = pygame.rect.Rect([0, 0, w, h])
         
+        transformations = {'x': 'midleft',
+                           'y': 'midtop',
+                           'top': 'midtop',
+                           'bottom': 'midbottom',
+                           'left': 'midleft',
+                           'right': 'midright',
+                           'centerx': 'center',
+                           'centery': 'center'}
+        
+        if hitbox_anchor in transformations:
+            hitbox_anchor = transformations[hitbox_anchor]
+
         self.hitbox_anchor = hitbox_anchor
         self.hitbox.center = location
-        self.align_hitbox()
+        self.align_rect_to_hitbox()
 
     def move_x(self):
         self.hitbox.x += self.vx
-        self.align_hitbox()
+        self.align_rect_to_hitbox()
 
     def move_y(self):
         self.hitbox.y += self.vy
-        self.align_hitbox()
+        self.align_rect_to_hitbox()
 
     def check_collisions_x(self, group):
         hits = pygame.sprite.spritecollide(self, group, False, hitbox_collide)
+        hits.remove(self)
 
         for hit in hits:
             if self.vx < 0:
@@ -57,10 +85,11 @@ class Entity(pygame.sprite.Sprite):
             elif self.vx > 0:
                 self.hitbox.right = hit.hitbox.left
 
-            self.align_hitbox()
+        self.align_rect_to_hitbox()
 
     def check_collisions_y(self, group):
         hits = pygame.sprite.spritecollide(self, group, False, hitbox_collide)
+        hits.remove(self)
 
         for hit in hits:
             if self.vy < 0:
@@ -68,15 +97,27 @@ class Entity(pygame.sprite.Sprite):
             elif self.vy > 0:
                 self.hitbox.bottom = hit.hitbox.top
 
-            self.align_hitbox()
+        self.align_rect_to_hitbox()
 
-    def align_hitbox(self):
-        #self.rect.center = self.hitbox.center
+    def check_screen_edges(self):
+        if self.hitbox.left < 0:
+            self.hitbox.left = 0
+        elif self.hitbox.right > WIDTH:
+            self.hitbox.right = WIDTH
+            
+        if self.hitbox.top < 0:
+            self.hitbox.top = 0
+        elif self.hitbox.bottom > WIDTH:
+            self.hitbox.bottom = WIDTH
+
+        self.align_rect_to_hitbox()
+            
+    def align_rect_to_hitbox(self):
         attribute_value = getattr(self.hitbox, self.hitbox_anchor)
         setattr(self.rect, self.hitbox_anchor, attribute_value)
 
 
-class Wall(Entity):
+class Block(Entity):
 
     def __init__(self, image, location, *args):
         super().__init__(image, location, *args)    
@@ -84,33 +125,31 @@ class Wall(Entity):
 
 class Player(Entity):
 
-    def __init__(self, image, location, *args):
+    def __init__(self, image, location, controls, *args):
         super().__init__(image, location, *args)    
+        self.controls = controls
 
-    def go_up(self):
-        self.vy = -5
+    def act(self, pressed):
+        if pressed[self.controls['up']]:
+            self.vy = -1 * PLAYER_SPEED
+        elif pressed[self.controls['down']]:
+            self.vy = PLAYER_SPEED
+        else:
+            self.vy = 0
+            
+        if pressed[self.controls['left']]:
+            self.vx = -1 * PLAYER_SPEED
+        elif pressed[self.controls['right']]:
+            self.vx = PLAYER_SPEED
+        else:
+            self.vx = 0
 
-    def go_down(self):
-        self.vy = 5
-
-    def go_left(self):
-        self.vx = -5
-
-    def go_right(self):
-        self.vx = 5
-
-    def stop_x(self):
-        self.vx = 0
-
-    def stop_y(self):
-        self.vy = 0
-
-    def update(self, obstacles):
+    def update(self, collidables):
         self.move_x()
-        self.check_collisions_x(obstacles)
-
+        self.check_collisions_x(collidables)
         self.move_y()
-        self.check_collisions_y(obstacles)
+        self.check_collisions_y(collidables)
+        self.check_screen_edges()
 
 
 # Main game class 
@@ -133,16 +172,20 @@ class Game:
         p1_img = pygame.Surface([100, 100])
         p1_img.fill(pygame.Color('red'))
 
-        self.p1 = Player(p1_img, [150, 150], [80, 80], 'midbottom')
-    
-        obstacle_img = pygame.Surface([100, 100])
-        obstacle_img.fill(pygame.Color('green'))
-  
-        obstacle_1 = Wall(obstacle_img, [200, 400])
-        obstacle_2 = Wall(obstacle_img, [400, 200])
+        p2_img = pygame.Surface([100, 100])
+        p2_img.fill(pygame.Color('green'))
 
-        self.players = pygame.sprite.GroupSingle(self.p1)
-        self.obstacles = pygame.sprite.Group(obstacle_1, obstacle_2)
+        p1 = Player(p1_img, [200, 200], P1_CONTROLS, [80, 80], 'midbottom')
+        p2 = Player(p2_img, [400, 400], P2_CONTROLS, [80, 80], 'center')
+    
+        block_img = pygame.Surface([100, 100])
+        block_img.fill(pygame.Color('blue'))
+  
+        b1 = Block(block_img, [200, 400])
+        b2 = Block(block_img, [400, 200], [80, 80], 'left')
+
+        self.players = pygame.sprite.Group(p1, p2)
+        self.all_sprites = pygame.sprite.Group(p1, p2, b1, b2)
 
     def process_input(self):
         pressed = pygame.key.get_pressed()
@@ -151,30 +194,19 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
 
-        if pressed[pygame.K_UP]:
-            self.p1.go_up()
-        elif pressed[pygame.K_DOWN]:
-            self.p1.go_down()
-        else:
-            self.p1.stop_y()
-            
-        if pressed[pygame.K_LEFT]:
-            self.p1.go_left()
-        elif pressed[pygame.K_RIGHT]:
-            self.p1.go_right()
-        else:
-            self.p1.stop_x()
+
+        for player in self.players:
+            player.act(pressed)
 
     def update(self):
-        self.players.update(self.obstacles) 
+        self.all_sprites.update(self.all_sprites) 
 
     def render(self):
-        self.screen.fill(pygame.Color('black'))
-        self.players.draw(self.screen)
-        self.obstacles.draw(self.screen)
+        self.screen.fill(pygame.Color('lightgray'))
+        self.all_sprites.draw(self.screen)
 
-        for p in self.players:
-            pygame.draw.rect(self.screen, pygame.Color('white'), p.hitbox)
+        for sprite in self.all_sprites:
+            pygame.draw.rect(self.screen, pygame.Color('black'), sprite.hitbox, 2)
 
     def run(self):
         while self.running:
