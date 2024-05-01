@@ -3,8 +3,8 @@ import pygame
 
 
 # Screen settings
-WIDTH = 600
-HEIGHT = 600
+SCREEN_WIDTH = 600
+SCREEN_HEIGHT = 600
 TITLE = "Custom Hit Boxes"
 FPS = 60
 
@@ -31,7 +31,7 @@ def hitbox_collide(sprite1, sprite2):
 # Sprites
 class Entity(pygame.sprite.Sprite):
 
-    def __init__(self, image, location, hitbox_size=None, hitbox_anchor='center'):
+    def __init__(self, image, location, **kwargs):
         '''
         hitbox_size should be an ordered pair in the form [width, height].
         hitbox_anchor is any valid Rect positioning attribute. If the Rect
@@ -45,11 +45,17 @@ class Entity(pygame.sprite.Sprite):
         self.vx = 0
         self.vy = 0
 
-        if hitbox_size is None:
-            self.hitbox = self.rect
-        else:
-            w, h = hitbox_size
+        if 'hitbox_size' in kwargs:
+            w, h = kwargs['hitbox_size']
             self.hitbox = pygame.rect.Rect([0, 0, w, h])
+        else:
+            self.hitbox = self.rect
+            
+        if 'hitbox_anchor' in kwargs:
+            hitbox_anchor = kwargs['hitbox_anchor']
+        else:
+            hitbox_anchor = 'center'
+
         
         transformations = {'x': 'midleft',
                            'y': 'midtop',
@@ -102,13 +108,13 @@ class Entity(pygame.sprite.Sprite):
     def check_screen_edges(self):
         if self.hitbox.left < 0:
             self.hitbox.left = 0
-        elif self.hitbox.right > WIDTH:
-            self.hitbox.right = WIDTH
+        elif self.hitbox.right > SCREEN_WIDTH:
+            self.hitbox.right = SCREEN_WIDTH
             
         if self.hitbox.top < 0:
             self.hitbox.top = 0
-        elif self.hitbox.bottom > WIDTH:
-            self.hitbox.bottom = WIDTH
+        elif self.hitbox.bottom > SCREEN_WIDTH:
+            self.hitbox.bottom = SCREEN_WIDTH
 
         self.align_rect_to_hitbox()
             
@@ -119,14 +125,14 @@ class Entity(pygame.sprite.Sprite):
 
 class Block(Entity):
 
-    def __init__(self, image, location, *args):
-        super().__init__(image, location, *args)    
+    def __init__(self, image, location, **kwargs):
+        super().__init__(image, location, **kwargs)    
 
 
 class Player(Entity):
 
-    def __init__(self, image, location, controls, *args):
-        super().__init__(image, location, *args)    
+    def __init__(self, image, location, controls, **kwargs):
+        super().__init__(image, location, **kwargs)    
         self.controls = controls
 
     def act(self, pressed):
@@ -161,7 +167,7 @@ class Game:
         pygame.init()
 
         # Make window
-        self.screen = pygame.display.set_mode([WIDTH, HEIGHT])
+        self.screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
         self.running = True
@@ -175,14 +181,14 @@ class Game:
         p2_img = pygame.Surface([100, 100])
         p2_img.fill(pygame.Color('green'))
 
-        p1 = Player(p1_img, [200, 200], P1_CONTROLS, [80, 80], 'midbottom')
-        p2 = Player(p2_img, [400, 400], P2_CONTROLS, [80, 80], 'center')
+        p1 = Player(p1_img, [200, 200], P1_CONTROLS, hitbox_size=[80, 80], hitbox_anchor='midbottom')
+        p2 = Player(p2_img, [400, 400], P2_CONTROLS, hitbox_size=[80, 80], hitbox_anchor='center')
     
         block_img = pygame.Surface([100, 100])
         block_img.fill(pygame.Color('blue'))
   
         b1 = Block(block_img, [200, 400])
-        b2 = Block(block_img, [400, 200], [80, 80], 'left')
+        b2 = Block(block_img, [400, 200], hitbox_anchor='left', hitbox_size=[80, 80])
 
         self.players = pygame.sprite.Group(p1, p2)
         self.all_sprites = pygame.sprite.Group(p1, p2, b1, b2)
@@ -193,7 +199,6 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-
 
         for player in self.players:
             player.act(pressed)
